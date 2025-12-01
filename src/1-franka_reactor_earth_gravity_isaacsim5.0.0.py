@@ -22,15 +22,15 @@ except ImportError:
     print("[WARNING] dearpygui not available - control panel disabled")
 
 
-class FrankaCylinderMoverRMPflow:
+class FrankaReactorHandlerRMPflow:
     """
-    State machine controller using RMPflow for smooth motion planning
+    State machine controller for nuclear reactor handling using RMPflow for smooth motion planning
     """
     
     def __init__(self, world: World, franka: Franka):
         self.world = world
         self.franka = franka
-        self.cylinder = None
+        self.reactor = None
         self.rmpflow = None
         self.articulation_rmpflow = None
         
@@ -41,10 +41,10 @@ class FrankaCylinderMoverRMPflow:
         self.states = [
             "idle",
             "open_gripper",
-            "approach_cylinder",
+            "approach_reactor",
             "lower_to_grasp",
             "close_gripper",
-            "lift_cylinder",
+            "lift_reactor",
             "move_to_target",
             "lower_to_target",
             "open_gripper",
@@ -55,9 +55,9 @@ class FrankaCylinderMoverRMPflow:
         self.step_counter = 0
         self.steps_per_state = 250
         
-        # End effector positions
-        self.cylinder_pickup_pos = np.array([0.4, 0.25, 0.05])
-        self.cylinder_place_pos = np.array([0.4, -0.25, 0.05])
+        # End effector positions for nuclear reactor handling
+        self.reactor_pickup_pos = np.array([0.4, 0.25, 0.05])
+        self.reactor_place_pos = np.array([0.4, -0.25, 0.05])
         self.home_pos = np.array([0.3, 0.0, 0.6])
         self.safe_height = 0.32
         
@@ -108,7 +108,7 @@ class FrankaCylinderMoverRMPflow:
             return False
     
     def setup_scene(self):
-        """Setup the scene with robot and cylinder"""
+        """Setup the scene with robot and nuclear reactor"""
         print("\n" + "="*60)
         print("Setting up scene...")
         print("="*60)
@@ -116,12 +116,12 @@ class FrankaCylinderMoverRMPflow:
         # Add ground plane
         self.world.scene.add_default_ground_plane()
         
-        # Add cylinder on the left side
-        self.cylinder = self.world.scene.add(
+        # Add nuclear reactor on the left side (represented as cylinder)
+        self.reactor = self.world.scene.add(
             DynamicCylinder(
-                prim_path="/World/Cylinder",
-                name="target_cylinder",
-                position=self.cylinder_pickup_pos,
+                prim_path="/World/NuclearReactor",
+                name="nuclear_reactor",
+                position=self.reactor_pickup_pos,
                 orientation=np.array([1.0, 0.0, 0.0, 0.0]),
                 radius=0.036,
                 height=0.08,
@@ -132,8 +132,8 @@ class FrankaCylinderMoverRMPflow:
         
         print("? Scene setup complete")
         print(f"  - Franka robot at origin")
-        print(f"  - Cylinder at left: {self.cylinder_pickup_pos}")
-        print(f"  - Target position (right): {self.cylinder_place_pos}")
+        print(f"  - Nuclear reactor at pickup location: {self.reactor_pickup_pos}")
+        print(f"  - Target placement location: {self.reactor_place_pos}")
         print(f"  - Camera positioned to the right, viewing robot center")
     
     def capture_initial_positions(self):
@@ -159,15 +159,15 @@ class FrankaCylinderMoverRMPflow:
         print("\nResetting scene...")
         
         try:
-            # Reset cylinder position
-            if self.cylinder is not None:
-                self.cylinder.set_world_pose(
-                    position=self.cylinder_pickup_pos,
+            # Reset reactor position
+            if self.reactor is not None:
+                self.reactor.set_world_pose(
+                    position=self.reactor_pickup_pos,
                     orientation=np.array([1.0, 0.0, 0.0, 0.0])
                 )
                 # Set velocity to zero
-                self.cylinder.set_linear_velocity(np.array([0.0, 0.0, 0.0]))
-                self.cylinder.set_angular_velocity(np.array([0.0, 0.0, 0.0]))
+                self.reactor.set_linear_velocity(np.array([0.0, 0.0, 0.0]))
+                self.reactor.set_angular_velocity(np.array([0.0, 0.0, 0.0]))
             
             # Reset robot to initial position
             if self.franka is not None and self.initial_joint_positions is not None:
@@ -230,8 +230,8 @@ class FrankaCylinderMoverRMPflow:
                 if self.step_counter > 50:
                     self.move_to_next_state()
             
-            elif state == "approach_cylinder":
-                target_pos = self.cylinder_pickup_pos.copy()
+            elif state == "approach_reactor":
+                target_pos = self.reactor_pickup_pos.copy()
                 target_pos[2] += 0.15
                 self.set_end_effector_target(target_pos, open_gripper=True)
                 action = self.articulation_rmpflow.get_next_articulation_action(dt)
@@ -240,7 +240,7 @@ class FrankaCylinderMoverRMPflow:
                     self.move_to_next_state()
             
             elif state == "lower_to_grasp":
-                self.set_end_effector_target(self.cylinder_pickup_pos, open_gripper=True)
+                self.set_end_effector_target(self.reactor_pickup_pos, open_gripper=True)
                 action = self.articulation_rmpflow.get_next_articulation_action(dt)
                 self.franka.apply_action(action)
                 if self.step_counter > self.steps_per_state:
@@ -254,8 +254,8 @@ class FrankaCylinderMoverRMPflow:
                 if self.step_counter > self.steps_per_state:
                     self.move_to_next_state()
             
-            elif state == "lift_cylinder":
-                lift_pos = self.cylinder_pickup_pos.copy()
+            elif state == "lift_reactor":
+                lift_pos = self.reactor_pickup_pos.copy()
                 lift_pos[2] = self.safe_height
                 self.set_end_effector_target(lift_pos, open_gripper=False)
                 action = self.articulation_rmpflow.get_next_articulation_action(dt)
@@ -264,7 +264,7 @@ class FrankaCylinderMoverRMPflow:
                     self.move_to_next_state()
             
             elif state == "move_to_target":
-                move_pos = self.cylinder_place_pos.copy()
+                move_pos = self.reactor_place_pos.copy()
                 move_pos[2] = self.safe_height
                 self.set_end_effector_target(move_pos, open_gripper=False)
                 action = self.articulation_rmpflow.get_next_articulation_action(dt)
@@ -273,7 +273,7 @@ class FrankaCylinderMoverRMPflow:
                     self.move_to_next_state()
             
             elif state == "lower_to_target":
-                self.set_end_effector_target(self.cylinder_place_pos, open_gripper=False)
+                self.set_end_effector_target(self.reactor_place_pos, open_gripper=False)
                 action = self.articulation_rmpflow.get_next_articulation_action(dt)
                 self.franka.apply_action(action)
                 if self.step_counter > self.steps_per_state:
@@ -306,7 +306,7 @@ class FrankaCylinderMoverRMPflow:
 class SimulationController:
     """Manages simulation state and control panel"""
     
-    def __init__(self, world: World, controller: FrankaCylinderMoverRMPflow):
+    def __init__(self, world: World, controller: FrankaReactorHandlerRMPflow):
         self.world = world
         self.controller = controller
         self.is_running = False
@@ -329,9 +329,9 @@ class SimulationController:
         try:
             dpg.create_context()
             
-            with dpg.window(label="Franka Simulation Control", tag="main_window", 
+            with dpg.window(label="Franka Reactor Handler - Control Panel", tag="main_window", 
                             width=400, height=380, pos=(50, 50), no_close=True):
-                dpg.add_text("Franka Cylinder Mover - RMPflow", color=(100, 200, 255))
+                dpg.add_text("Franka Nuclear Reactor Handler - RMPflow", color=(100, 200, 255))
                 dpg.add_text("? EARTH GRAVITY: 9.81 m/s²", color=(255, 200, 100))
                 dpg.add_separator()
                 
@@ -363,7 +363,7 @@ class SimulationController:
                 dpg.add_button(label="EXIT", callback=self.exit_simulation, 
                               width=380, height=40, tag="exit_button")
             
-            dpg.create_viewport(title="Franka Control Panel", width=420, height=430, vsync=False)
+            dpg.create_viewport(title="Franka Reactor Handler Control", width=420, height=430, vsync=False)
             dpg.setup_dearpygui()
             dpg.show_viewport()
             dpg.set_primary_window("main_window", True)
@@ -604,9 +604,9 @@ def set_earth_gravity(world: World):
 def main():
     """Main function"""
     print("\n" + "="*60)
-    print("FRANKA CYLINDER MOVER WITH RMPFLOW")
+    print("FRANKA NUCLEAR REACTOR HANDLER")
     print("? EARTH GRAVITY SIMULATION: 9.81 m/s²")
-    print("Smooth inverse kinematics control")
+    print("Smooth inverse kinematics control with RMPflow")
     print("Isaac Sim 5.0.0")
     print("="*60)
     
@@ -628,7 +628,7 @@ def main():
     )
     
     # Create controller
-    controller = FrankaCylinderMoverRMPflow(world, franka)
+    controller = FrankaReactorHandlerRMPflow(world, franka)
     
     # Setup scene
     controller.setup_scene()
@@ -718,7 +718,7 @@ def main():
                 if done and not sim_controller.is_task_complete:
                     print("\n" + "="*60)
                     print("? TASK COMPLETED!")
-                    print("Cylinder successfully moved from left to right")
+                    print("Nuclear reactor successfully moved from left to right")
                     print("? Under Earth gravity (9.81 m/s²)")
                     print("="*60)
                     print("\nUse the control panel to RESET, START again, or EXIT")
